@@ -4,9 +4,40 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
+	"cto/src/internal/logger"
 	"cto/src/internal/utils"
+
+	"github.com/go-chi/chi/v5/middleware"
 )
+
+func handlerLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" || strings.HasSuffix(r.URL.Path, "/health") || strings.HasSuffix(r.URL.Path, "/health/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		start := time.Now()
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(ww, r)
+		logger.LogHandler("%s %s %s from %s - %d %dB in %s",
+			r.Method, r.URL.Path, r.Proto, r.RemoteAddr,
+			ww.Status(), ww.BytesWritten(), time.Since(start))
+	})
+}
+
+func conditionalLogger(next http.Handler) http.Handler {
+	loggerMW := middleware.Logger(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" || strings.HasSuffix(r.URL.Path, "/health") || strings.HasSuffix(r.URL.Path, "/health/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		loggerMW.ServeHTTP(w, r)
+	})
+}
+
 
 func JWTMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

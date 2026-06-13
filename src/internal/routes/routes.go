@@ -14,7 +14,8 @@ func NewRouter() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(utils.CORSMiddleware)
-	r.Use(middleware.Logger)
+	r.Use(conditionalLogger)
+	r.Use(handlerLogger)
 	r.Use(middleware.Recoverer)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +74,31 @@ func NewRouter() http.Handler {
 		sub.Delete("/projects/{id}/organizations/{organizationId}", ctoHandlers.RevokeOrganizationAccessHandler)
 
 		sub.Get("/organization-databases", ctoHandlers.ListDatabasesForOrganizationHandler)
+
+		sub.Get("/dbaas", ctoHandlers.ListDBaaSInstancesHandler)
+		sub.Post("/dbaas", ctoHandlers.CreateDBaaSInstanceHandler)
+		sub.Get("/dbaas/{instanceId}", ctoHandlers.GetDBaaSInstanceHandler)
+		sub.Delete("/dbaas/{instanceId}", ctoHandlers.DeleteDBaaSInstanceHandler)
+
+		sub.Get("/gcp/resources", ctoHandlers.GetGCPCloudMapHandler)
+		sub.Get("/gcp/projects", ctoHandlers.ListGCPProjectsHandler)
+		sub.Get("/gcp/sql/tiers", ctoHandlers.GetSQLTiersHandler)
+		sub.Get("/gcp/regions", ctoHandlers.GetComputeRegionsHandler)
+
+		// Deployment as a Service
+		sub.Get("/deploy/apps", ctoHandlers.ListDeployAppsHandler)
+		sub.Post("/deploy/apps", ctoHandlers.CreateDeployAppHandler)
+		sub.Get("/deploy/apps/{appId}", ctoHandlers.GetDeployAppHandler)
+		sub.Delete("/deploy/apps/{appId}", ctoHandlers.DeleteDeployAppHandler)
+		sub.Post("/deploy/apps/{appId}/deploy", ctoHandlers.TriggerDeployHandler)
+		sub.Get("/deploy/apps/{appId}/builds", ctoHandlers.ListBuildsHandler)
+		sub.Get("/deploy/apps/{appId}/env", ctoHandlers.GetEnvVarsHandler)
+		sub.Put("/deploy/apps/{appId}/env", ctoHandlers.SetEnvVarsHandler)
+		sub.Get("/deploy/builds/{buildId}/logs", ctoHandlers.GetBuildLogsSSEHandler)
 	})
+
+	// GitHub webhook — no JWT, uses HMAC signature
+	r.Post("/webhooks/deploy/{appId}", ctoHandlers.WebhookGitHubHandler)
 
 	return r
 }

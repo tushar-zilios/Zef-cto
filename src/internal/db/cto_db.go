@@ -190,6 +190,100 @@ func InitCTODB(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {
 				CREATE INDEX IF NOT EXISTS idx_organization_to_database_database
 					ON public.organization_to_database(database_id);
 			`},
+			{"cto_database_projects_dbaas_link", `
+				ALTER TABLE public.cto_database_projects
+					ADD COLUMN IF NOT EXISTS dbaas_instance_id UUID;
+				CREATE INDEX IF NOT EXISTS idx_cto_db_projects_dbaas
+					ON public.cto_database_projects(dbaas_instance_id)
+					WHERE dbaas_instance_id IS NOT NULL;
+			`},
+			{"dbaas_instances", `
+				CREATE TABLE IF NOT EXISTS public.dbaas_instances (
+					instance_id      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+					workspace_id     UUID         NOT NULL,
+					created_by       UUID,
+					name             VARCHAR(255) NOT NULL,
+					gcp_instance_name VARCHAR(255) NOT NULL,
+					gcp_project      VARCHAR(255) NOT NULL DEFAULT 'bhanshu',
+					region           VARCHAR(100) NOT NULL DEFAULT 'us-central1',
+					db_type          VARCHAR(50)  NOT NULL DEFAULT 'postgres',
+					tier             VARCHAR(100) NOT NULL DEFAULT 'db-f1-micro',
+					status           VARCHAR(50)  NOT NULL DEFAULT 'provisioning',
+					connection_name  TEXT         NOT NULL DEFAULT '',
+					host             TEXT         NOT NULL DEFAULT '',
+					root_password    TEXT         NOT NULL DEFAULT '',
+					created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+					updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+				);
+				CREATE INDEX IF NOT EXISTS idx_dbaas_instances_workspace
+					ON public.dbaas_instances(workspace_id);
+			`},
+			{"dbaas_instances_failed_reason", `
+				ALTER TABLE public.dbaas_instances
+					ADD COLUMN IF NOT EXISTS failed_reason TEXT NOT NULL DEFAULT '';
+			`},
+			{"deployment_apps", `
+				CREATE TABLE IF NOT EXISTS public.deployment_apps (
+					app_id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+					workspace_id     UUID         NOT NULL,
+					created_by       UUID,
+					name             VARCHAR(255) NOT NULL,
+					repo_url         TEXT         NOT NULL DEFAULT '',
+					branch           VARCHAR(255) NOT NULL DEFAULT 'main',
+					status           VARCHAR(50)  NOT NULL DEFAULT 'idle',
+					service_url      TEXT         NOT NULL DEFAULT '',
+					cloud_run_service VARCHAR(255) NOT NULL DEFAULT '',
+					gcp_project      VARCHAR(255) NOT NULL DEFAULT 'bhanshu',
+					region           VARCHAR(100) NOT NULL DEFAULT 'us-central1',
+					webhook_secret   TEXT         NOT NULL DEFAULT '',
+					last_deployed_at TIMESTAMPTZ,
+					created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+					updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+				);
+				CREATE INDEX IF NOT EXISTS idx_deployment_apps_workspace
+					ON public.deployment_apps(workspace_id);
+			`},
+			{"deployment_env_vars", `
+				CREATE TABLE IF NOT EXISTS public.deployment_env_vars (
+					var_id  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+					app_id  UUID         NOT NULL
+					        REFERENCES public.deployment_apps(app_id) ON DELETE CASCADE,
+					key     VARCHAR(255) NOT NULL,
+					value   TEXT         NOT NULL DEFAULT '',
+					UNIQUE(app_id, key)
+				);
+				CREATE INDEX IF NOT EXISTS idx_deployment_env_vars_app
+					ON public.deployment_env_vars(app_id);
+			`},
+			{"deployment_builds", `
+				CREATE TABLE IF NOT EXISTS public.deployment_builds (
+					build_id     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+					app_id       UUID        NOT NULL
+					             REFERENCES public.deployment_apps(app_id) ON DELETE CASCADE,
+					triggered_by VARCHAR(50) NOT NULL DEFAULT 'manual',
+					commit_sha   VARCHAR(255) NOT NULL DEFAULT '',
+					commit_msg   TEXT        NOT NULL DEFAULT '',
+					status       VARCHAR(50) NOT NULL DEFAULT 'pending',
+					image_url    TEXT        NOT NULL DEFAULT '',
+					error_msg    TEXT        NOT NULL DEFAULT '',
+					started_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+					finished_at  TIMESTAMPTZ
+				);
+				CREATE INDEX IF NOT EXISTS idx_deployment_builds_app
+					ON public.deployment_builds(app_id, started_at DESC);
+			`},
+			{"deployment_build_logs", `
+				CREATE TABLE IF NOT EXISTS public.deployment_build_logs (
+					log_id   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+					build_id UUID        NOT NULL
+					         REFERENCES public.deployment_builds(build_id) ON DELETE CASCADE,
+					stream   VARCHAR(10) NOT NULL DEFAULT 'stdout',
+					message  TEXT        NOT NULL,
+					ts       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+				);
+				CREATE INDEX IF NOT EXISTS idx_deployment_build_logs_build
+					ON public.deployment_build_logs(build_id, ts ASC);
+			`},
 		}
 
 		for _, m := range migrations {

@@ -125,7 +125,7 @@ func CreateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	err := db.GetCTOPoolOrNil().QueryRow(r.Context(), `
 		INSERT INTO public.cto_database_projects
 			(workspace_id, name, description, db_type, host, port, db_name, username, color, created_by, db_password)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, '')::uuid, $11)
 		RETURNING database_id, workspace_id, name, description, db_type, host, port, db_name, username, color, created_by, created_at, updated_at, COALESCE(db_password, '')
 	`, workspaceID, input.Name, input.Description, input.DBType, input.Host, input.Port,
 		input.DBName, input.Username, input.Color, userID, hashedPassword,

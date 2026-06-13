@@ -105,10 +105,13 @@ type ViewInfo struct {
 }
 
 func ListSchemasHandler(w http.ResponseWriter, r *http.Request) {
-	if !ctoDBRequired(w) {
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
+	defer cleanup()
+
+	rows, err := q.Query(r.Context(), `
 		SELECT schema_name
 		FROM information_schema.schemata
 		WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
@@ -141,10 +144,14 @@ func ListTablesHandler(w http.ResponseWriter, r *http.Request) {
 	if schema == "" {
 		schema = "public"
 	}
-	if !ctoDBRequired(w) {
+
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
+	defer cleanup()
+
+	rows, err := q.Query(r.Context(), `
 		SELECT table_schema, table_name, table_type
 		FROM information_schema.tables
 		WHERE table_schema = $1
@@ -173,10 +180,14 @@ func ListTablesHandler(w http.ResponseWriter, r *http.Request) {
 func ListColumnsHandler(w http.ResponseWriter, r *http.Request) {
 	schema := chi.URLParam(r, "schema")
 	table := chi.URLParam(r, "table")
-	if !ctoDBRequired(w) {
+
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
+	defer cleanup()
+
+	rows, err := q.Query(r.Context(), `
 		SELECT
 			c.column_name,
 			c.data_type,
@@ -250,17 +261,19 @@ func GetTableRowsHandler(w http.ResponseWriter, r *http.Request) {
 	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
 		offset = o
 	}
-	if !ctoDBRequired(w) {
+
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	pool := db.GetCTOPoolOrNil()
+	defer cleanup()
 
 	var total int64
-	_ = pool.QueryRow(r.Context(), fmt.Sprintf(
+	_ = q.QueryRow(r.Context(), fmt.Sprintf(
 		`SELECT COUNT(*) FROM %s.%s`, quoteIdent(schema), quoteIdent(table),
 	)).Scan(&total)
 
-	rows, err := pool.Query(r.Context(), fmt.Sprintf(
+	rows, err := q.Query(r.Context(), fmt.Sprintf(
 		`SELECT * FROM %s.%s LIMIT $1 OFFSET $2`, quoteIdent(schema), quoteIdent(table),
 	), limit, offset)
 	if err != nil {
@@ -304,19 +317,19 @@ func ExecuteSQLHandler(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusBadRequest, "query is required")
 		return
 	}
-	if !ctoDBRequired(w) {
+
+	q, cleanup, ok := projectQuerier(w, r, req.DatabaseID)
+	if !ok {
 		return
 	}
-	pool := db.GetCTOPoolOrNil()
+	defer cleanup()
 
 	start := timeNow()
-	rows, err := pool.Query(r.Context(), req.Query)
+	rows, err := q.Query(r.Context(), req.Query)
 	execMS := int(timeSince(start).Milliseconds())
 
 	if err != nil {
-		if req.DatabaseID != "" {
-			recordSQLHistory(r, req.DatabaseID, req.Query, execMS, 0, true, err.Error())
-		}
+		recordSQLHistory(r, req.DatabaseID, req.Query, execMS, 0, true, err.Error())
 		utils.WriteJSON(w, http.StatusOK, SQLResult{Error: err.Error()})
 		return
 	}
@@ -345,16 +358,12 @@ func ExecuteSQLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if rows.Err() != nil {
-		if req.DatabaseID != "" {
-			recordSQLHistory(r, req.DatabaseID, req.Query, execMS, 0, true, rows.Err().Error())
-		}
+		recordSQLHistory(r, req.DatabaseID, req.Query, execMS, 0, true, rows.Err().Error())
 		utils.WriteJSON(w, http.StatusOK, SQLResult{Error: rows.Err().Error()})
 		return
 	}
 
-	if req.DatabaseID != "" {
-		recordSQLHistory(r, req.DatabaseID, req.Query, execMS, len(resultRows), false, "")
-	}
+	recordSQLHistory(r, req.DatabaseID, req.Query, execMS, len(resultRows), false, "")
 
 	cmdTag := rows.CommandTag()
 	utils.WriteJSON(w, http.StatusOK, SQLResult{
@@ -363,10 +372,13 @@ func ExecuteSQLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListExtensionsHandler(w http.ResponseWriter, r *http.Request) {
-	if !ctoDBRequired(w) {
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
+	defer cleanup()
+
+	rows, err := q.Query(r.Context(), `
 		SELECT e.extname, e.extversion, n.nspname, c.comment
 		FROM pg_extension e
 		LEFT JOIN pg_namespace n ON n.oid = e.extnamespace
@@ -394,10 +406,13 @@ func ListExtensionsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListFunctionsHandler(w http.ResponseWriter, r *http.Request) {
-	if !ctoDBRequired(w) {
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
+	defer cleanup()
+
+	rows, err := q.Query(r.Context(), `
 		SELECT n.nspname, p.proname, pg_get_function_result(p.oid),
 		       pg_get_function_arguments(p.oid), l.lanname, p.prosrc, obj_description(p.oid, 'pg_proc')
 		FROM pg_proc p
@@ -428,10 +443,13 @@ func ListFunctionsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListTriggersHandler(w http.ResponseWriter, r *http.Request) {
-	if !ctoDBRequired(w) {
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
+	defer cleanup()
+
+	rows, err := q.Query(r.Context(), `
 		SELECT trigger_schema, trigger_name, event_object_schema, event_object_table,
 		       action_timing, string_agg(event_manipulation, ', ' ORDER BY event_manipulation),
 		       action_orientation, action_statement
@@ -462,10 +480,13 @@ func ListTriggersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListRolesHandler(w http.ResponseWriter, r *http.Request) {
-	if !ctoDBRequired(w) {
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
+	defer cleanup()
+
+	rows, err := q.Query(r.Context(), `
 		SELECT r.rolname, r.rolsuper, r.rolinherit, r.rolcreaterole, r.rolcreatedb,
 		       r.rolcanlogin, r.rolreplication, r.rolconnlimit, r.rolbypassrls,
 		       COALESCE(array_agg(m.rolname) FILTER (WHERE m.rolname IS NOT NULL), '{}')
@@ -506,10 +527,14 @@ func ListViewsHandler(w http.ResponseWriter, r *http.Request) {
 	if schema == "" {
 		schema = "public"
 	}
-	if !ctoDBRequired(w) {
+
+	q, cleanup, ok := projectQuerier(w, r, r.URL.Query().Get("database_id"))
+	if !ok {
 		return
 	}
-	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
+	defer cleanup()
+
+	rows, err := q.Query(r.Context(), `
 		SELECT table_schema, table_name, view_definition
 		FROM information_schema.views
 		WHERE table_schema = $1

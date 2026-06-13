@@ -30,7 +30,7 @@ func StartHealthCheckWorker(ctx context.Context, services []ServiceHealth) <-cha
 				if err := pingHealth(ctx, client, svc); err != nil {
 					log.Printf("[HEALTH WORKER] %s is DOWN: %v", svc.Name, err)
 				} else {
-					log.Printf("[HEALTH WORKER] %s is UP", svc.Name)
+					// log.Printf("[HEALTH WORKER] %s is UP", svc.Name)
 				}
 			}
 		}
