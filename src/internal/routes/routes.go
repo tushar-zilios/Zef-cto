@@ -68,11 +68,11 @@ func NewRouter() http.Handler {
 		sub.Get("/db/roles", ctoHandlers.ListRolesHandler)
 		sub.Get("/db/views", ctoHandlers.ListViewsHandler)
 
-		sub.Get("/projects/{id}/workspaces", ctoHandlers.ListWorkspacesForDatabaseHandler)
-		sub.Post("/projects/{id}/workspaces", ctoHandlers.GrantWorkspaceAccessHandler)
-		sub.Delete("/projects/{id}/workspaces/{workspaceId}", ctoHandlers.RevokeWorkspaceAccessHandler)
+		sub.Get("/projects/{id}/organizations", ctoHandlers.ListOrganizationsForDatabaseHandler)
+		sub.Post("/projects/{id}/organizations", ctoHandlers.GrantOrganizationAccessHandler)
+		sub.Delete("/projects/{id}/organizations/{organizationId}", ctoHandlers.RevokeOrganizationAccessHandler)
 
-		sub.Get("/workspace-databases", ctoHandlers.ListDatabasesForWorkspaceHandler)
+		sub.Get("/organization-databases", ctoHandlers.ListDatabasesForOrganizationHandler)
 	})
 
 	return r

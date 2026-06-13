@@ -11,25 +11,25 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type WorkspaceDatabaseMapping struct {
-	MappingID   string    `json:"mapping_id"`
-	WorkspaceID string    `json:"workspace_id"`
-	DatabaseID  string    `json:"database_id"`
-	GrantedBy   *string   `json:"granted_by,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+type OrganizationDatabaseMapping struct {
+	MappingID      string    `json:"mapping_id"`
+	OrganizationID string    `json:"organization_id"`
+	DatabaseID     string    `json:"database_id"`
+	GrantedBy      *string   `json:"granted_by,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
-// ListWorkspacesForDatabaseHandler returns all workspaces that have access to a DB project.
-// GET /cto/projects/{id}/workspaces
-func ListWorkspacesForDatabaseHandler(w http.ResponseWriter, r *http.Request) {
+// ListOrganizationsForDatabaseHandler returns all organizations that have access to a DB project.
+// GET /cto/projects/{id}/organizations
+func ListOrganizationsForDatabaseHandler(w http.ResponseWriter, r *http.Request) {
 	if !ctoDBRequired(w) {
 		return
 	}
 	id := chi.URLParam(r, "id")
 
 	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
-		SELECT mapping_id, workspace_id, database_id, granted_by, created_at
-		FROM public.workspace_to_database
+		SELECT mapping_id, organization_id, database_id, granted_by, created_at
+		FROM public.organization_to_database
 		WHERE database_id = $1
 		ORDER BY created_at ASC
 	`, id)
@@ -39,61 +39,61 @@ func ListWorkspacesForDatabaseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var list []WorkspaceDatabaseMapping
+	var list []OrganizationDatabaseMapping
 	for rows.Next() {
-		var m WorkspaceDatabaseMapping
-		if err := rows.Scan(&m.MappingID, &m.WorkspaceID, &m.DatabaseID, &m.GrantedBy, &m.CreatedAt); err != nil {
+		var m OrganizationDatabaseMapping
+		if err := rows.Scan(&m.MappingID, &m.OrganizationID, &m.DatabaseID, &m.GrantedBy, &m.CreatedAt); err != nil {
 			continue
 		}
 		list = append(list, m)
 	}
 	if list == nil {
-		list = []WorkspaceDatabaseMapping{}
+		list = []OrganizationDatabaseMapping{}
 	}
 	utils.WriteJSON(w, http.StatusOK, list)
 }
 
-// ListDatabasesForWorkspaceHandler returns all DB projects a workspace has access to.
-// GET /cto/workspace-databases?workspace_id=...
-func ListDatabasesForWorkspaceHandler(w http.ResponseWriter, r *http.Request) {
+// ListDatabasesForOrganizationHandler returns all DB projects an organization has access to.
+// GET /cto/organization-databases?organization_id=...
+func ListDatabasesForOrganizationHandler(w http.ResponseWriter, r *http.Request) {
 	if !ctoDBRequired(w) {
 		return
 	}
-	workspaceID := r.URL.Query().Get("workspace_id")
-	if workspaceID == "" {
-		utils.WriteError(w, http.StatusBadRequest, "workspace_id is required")
+	organizationID := r.URL.Query().Get("organization_id")
+	if organizationID == "" {
+		utils.WriteError(w, http.StatusBadRequest, "organization_id is required")
 		return
 	}
 
 	rows, err := db.GetCTOPoolOrNil().Query(r.Context(), `
-		SELECT m.mapping_id, m.workspace_id, m.database_id, m.granted_by, m.created_at
-		FROM public.workspace_to_database m
-		WHERE m.workspace_id = $1
+		SELECT m.mapping_id, m.organization_id, m.database_id, m.granted_by, m.created_at
+		FROM public.organization_to_database m
+		WHERE m.organization_id = $1
 		ORDER BY m.created_at ASC
-	`, workspaceID)
+	`, organizationID)
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer rows.Close()
 
-	var list []WorkspaceDatabaseMapping
+	var list []OrganizationDatabaseMapping
 	for rows.Next() {
-		var m WorkspaceDatabaseMapping
-		if err := rows.Scan(&m.MappingID, &m.WorkspaceID, &m.DatabaseID, &m.GrantedBy, &m.CreatedAt); err != nil {
+		var m OrganizationDatabaseMapping
+		if err := rows.Scan(&m.MappingID, &m.OrganizationID, &m.DatabaseID, &m.GrantedBy, &m.CreatedAt); err != nil {
 			continue
 		}
 		list = append(list, m)
 	}
 	if list == nil {
-		list = []WorkspaceDatabaseMapping{}
+		list = []OrganizationDatabaseMapping{}
 	}
 	utils.WriteJSON(w, http.StatusOK, list)
 }
 
-// GrantWorkspaceAccessHandler gives a workspace access to a DB project.
-// POST /cto/projects/{id}/workspaces
-func GrantWorkspaceAccessHandler(w http.ResponseWriter, r *http.Request) {
+// GrantOrganizationAccessHandler gives an organization access to a DB project.
+// POST /cto/projects/{id}/organizations
+func GrantOrganizationAccessHandler(w http.ResponseWriter, r *http.Request) {
 	if !ctoDBRequired(w) {
 		return
 	}
@@ -101,21 +101,21 @@ func GrantWorkspaceAccessHandler(w http.ResponseWriter, r *http.Request) {
 	userID, _ := r.Context().Value("user_id").(string)
 
 	var input struct {
-		WorkspaceID string `json:"workspace_id"`
+		OrganizationID string `json:"organization_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.WorkspaceID == "" {
-		utils.WriteError(w, http.StatusBadRequest, "workspace_id is required")
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.OrganizationID == "" {
+		utils.WriteError(w, http.StatusBadRequest, "organization_id is required")
 		return
 	}
 
-	var m WorkspaceDatabaseMapping
+	var m OrganizationDatabaseMapping
 	err := db.GetCTOPoolOrNil().QueryRow(r.Context(), `
-		INSERT INTO public.workspace_to_database (workspace_id, database_id, granted_by)
+		INSERT INTO public.organization_to_database (organization_id, database_id, granted_by)
 		VALUES ($1, $2, NULLIF($3, '')::uuid)
-		ON CONFLICT (workspace_id, database_id) DO UPDATE SET granted_by = EXCLUDED.granted_by
-		RETURNING mapping_id, workspace_id, database_id, granted_by, created_at
-	`, input.WorkspaceID, id, userID,
-	).Scan(&m.MappingID, &m.WorkspaceID, &m.DatabaseID, &m.GrantedBy, &m.CreatedAt)
+		ON CONFLICT (organization_id, database_id) DO UPDATE SET granted_by = EXCLUDED.granted_by
+		RETURNING mapping_id, organization_id, database_id, granted_by, created_at
+	`, input.OrganizationID, id, userID,
+	).Scan(&m.MappingID, &m.OrganizationID, &m.DatabaseID, &m.GrantedBy, &m.CreatedAt)
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -123,19 +123,19 @@ func GrantWorkspaceAccessHandler(w http.ResponseWriter, r *http.Request) {
 	utils.WriteJSON(w, http.StatusCreated, m)
 }
 
-// RevokeWorkspaceAccessHandler removes a workspace's access to a DB project.
-// DELETE /cto/projects/{id}/workspaces/{workspaceId}
-func RevokeWorkspaceAccessHandler(w http.ResponseWriter, r *http.Request) {
+// RevokeOrganizationAccessHandler removes an organization's access to a DB project.
+// DELETE /cto/projects/{id}/organizations/{organizationId}
+func RevokeOrganizationAccessHandler(w http.ResponseWriter, r *http.Request) {
 	if !ctoDBRequired(w) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	workspaceID := chi.URLParam(r, "workspaceId")
+	organizationID := chi.URLParam(r, "organizationId")
 
 	tag, err := db.GetCTOPoolOrNil().Exec(r.Context(), `
-		DELETE FROM public.workspace_to_database
-		WHERE database_id = $1 AND workspace_id = $2
-	`, id, workspaceID)
+		DELETE FROM public.organization_to_database
+		WHERE database_id = $1 AND organization_id = $2
+	`, id, organizationID)
 	if err != nil || tag.RowsAffected() == 0 {
 		utils.WriteError(w, http.StatusNotFound, "mapping not found")
 		return

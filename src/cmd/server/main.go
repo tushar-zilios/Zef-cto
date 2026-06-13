@@ -10,10 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"sync"
+
 	"cto/src/internal/config"
 	"cto/src/internal/db"
 	"cto/src/internal/logger"
 	"cto/src/internal/routes"
+	"cto/src/internal/worker"
 )
 
 func main() {
@@ -59,6 +62,12 @@ func run() error {
 		Handler: router,
 	}
 
+	healthCtx, healthCancel := context.WithCancel(context.Background())
+	defer healthCancel()
+	healthDone := worker.StartHealthCheckWorker(healthCtx, []worker.ServiceHealth{
+		{Name: "CTO", URL: cfg.BackendURL + "/health"},
+	})
+
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, os.Interrupt, syscall.SIGTERM)
 
@@ -87,6 +96,20 @@ func run() error {
 	} else {
 		log.Println("HTTP server shutdown successfully.")
 	}
+
+	healthCancel()
+	var stopWg sync.WaitGroup
+	stopWg.Add(1)
+	go func() {
+		defer stopWg.Done()
+		select {
+		case <-healthDone:
+			log.Println("[HEALTH WORKER] Health check worker stopped gracefully.")
+		case <-time.After(5 * time.Second):
+			log.Println("[HEALTH WORKER] Warning: Health check worker shutdown timed out.")
+		}
+	}()
+	stopWg.Wait()
 
 	return runErr
 }

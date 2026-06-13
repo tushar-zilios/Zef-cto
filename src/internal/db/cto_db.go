@@ -75,6 +75,7 @@ func InitCTODB(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {
 					color             VARCHAR(20)  DEFAULT '#3ecf8e',
 					is_active         BOOLEAN      NOT NULL DEFAULT true,
 					last_connected_at TIMESTAMPTZ,
+					db_password       TEXT         DEFAULT '',
 					created_at        TIMESTAMPTZ  DEFAULT NOW(),
 					updated_at        TIMESTAMPTZ  DEFAULT NOW()
 				);
@@ -87,6 +88,10 @@ func InitCTODB(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {
 					ADD COLUMN IF NOT EXISTS last_connected_at TIMESTAMPTZ;
 				CREATE INDEX IF NOT EXISTS idx_cto_db_projects_workspace
 					ON public.cto_database_projects(workspace_id);
+			`},
+			{"cto_database_projects_db_password", `
+				ALTER TABLE public.cto_database_projects
+					ADD COLUMN IF NOT EXISTS db_password TEXT DEFAULT '';
 			`},
 			{"cto_database_credentials", `
 				CREATE TABLE IF NOT EXISTS public.cto_database_credentials (
@@ -170,20 +175,20 @@ func InitCTODB(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {
 				CREATE INDEX IF NOT EXISTS idx_cto_ideate_messages_user_id
 					ON public.cto_ideate_messages(user_id, created_at);
 			`},
-			{"workspace_to_database", `
-				CREATE TABLE IF NOT EXISTS public.workspace_to_database (
-					mapping_id   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-					workspace_id UUID        NOT NULL,
-					database_id  UUID        NOT NULL
-					             REFERENCES public.cto_database_projects(database_id) ON DELETE CASCADE,
-					granted_by   UUID,
-					created_at   TIMESTAMPTZ DEFAULT NOW(),
-					UNIQUE (workspace_id, database_id)
+			{"organization_to_database", `
+				CREATE TABLE IF NOT EXISTS public.organization_to_database (
+					mapping_id      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+					organization_id UUID        NOT NULL,
+					database_id     UUID        NOT NULL
+					                REFERENCES public.cto_database_projects(database_id) ON DELETE CASCADE,
+					granted_by      UUID,
+					created_at      TIMESTAMPTZ DEFAULT NOW(),
+					UNIQUE (organization_id, database_id)
 				);
-				CREATE INDEX IF NOT EXISTS idx_workspace_to_database_workspace
-					ON public.workspace_to_database(workspace_id);
-				CREATE INDEX IF NOT EXISTS idx_workspace_to_database_database
-					ON public.workspace_to_database(database_id);
+				CREATE INDEX IF NOT EXISTS idx_organization_to_database_organization
+					ON public.organization_to_database(organization_id);
+				CREATE INDEX IF NOT EXISTS idx_organization_to_database_database
+					ON public.organization_to_database(database_id);
 			`},
 		}
 
