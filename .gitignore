@@ -1,0 +1,17 @@
+# Compiled Go binaries and object files
+main
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Environment and Secret files
+.env
+*.env
+
+# Log files and directories
+logs/
+*.log

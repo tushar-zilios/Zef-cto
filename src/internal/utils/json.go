@@ -16,3 +16,7 @@ func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
 func WriteError(w http.ResponseWriter, status int, message string) {
 	WriteJSON(w, status, map[string]string{"error": message})
 }
+
+func ReadJSON(r *http.Request, v interface{}) error {
+	return json.NewDecoder(r.Body).Decode(v)
+}
