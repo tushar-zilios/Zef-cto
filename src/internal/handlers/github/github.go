@@ -277,23 +277,24 @@ func exchangeCode(code string) (accessToken, login string, err error) {
 	return tokenResp.AccessToken, ghUser.Login, nil
 }
 
-type GitHubRepo struct {
+type ghRepo struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
 	FullName    string `json:"full_name"`
 	Private     bool   `json:"private"`
 	HTMLURL     string `json:"html_url"`
 	Description string `json:"description"`
-	UpdatedAt   string `json:"updated_at"`
 	Language    string `json:"language"`
+	UpdatedAt   string `json:"updated_at"`
+	Fork        bool   `json:"fork"`
 }
 
-func fetchAllRepos(accessToken string) ([]GitHubRepo, error) {
-	var all []GitHubRepo
-	pageNum := 1
+func fetchAllRepos(accessToken string) ([]ghRepo, error) {
+	var all []ghRepo
+	page := 1
 	for {
-		apiURL := fmt.Sprintf("https://api.github.com/user/repos?per_page=100&page=%d&sort=updated", pageNum)
-		req, _ := http.NewRequest("GET", apiURL, nil)
+		req, _ := http.NewRequest("GET",
+			fmt.Sprintf("https://api.github.com/user/repos?per_page=100&page=%d&sort=updated", page), nil)
 		req.Header.Set("Authorization", "Bearer "+accessToken)
 		req.Header.Set("Accept", "application/vnd.github+json")
 
@@ -301,23 +302,21 @@ func fetchAllRepos(accessToken string) ([]GitHubRepo, error) {
 		if err != nil {
 			return nil, err
 		}
-		var batch []GitHubRepo
+		var batch []ghRepo
 		if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
 			resp.Body.Close()
 			return nil, err
 		}
 		resp.Body.Close()
-		if len(batch) == 0 {
-			break
-		}
 		all = append(all, batch...)
 		if len(batch) < 100 {
 			break
 		}
-		pageNum++
+		page++
 	}
 	return all, nil
 }
+
 
 func upsertConnection(ctx context.Context, userID, login, accessToken string) error {
 	pool := db.GetCTOPoolOrNil()

@@ -77,14 +77,19 @@ func NewRouter() http.Handler {
 		r.Get("/{id}/audit-logs", projectHandlers.ListProjectAuditLogsHandler)
 	})
 
-	// GitHub OAuth — /github/connect is a browser redirect so it takes JWT via ?token=
-	r.Get("/github/connect", githubHandlers.ConnectHandler)
-	r.Get("/github/callback", githubHandlers.CallbackHandler)
+	// GitHub OAuth — all routes under /github to avoid Chi trie conflicts
 	r.Route("/github", func(r chi.Router) {
-		r.Use(JWTMiddleware)
-		r.Get("/status", githubHandlers.StatusHandler)
-		r.Get("/repos", githubHandlers.ReposHandler)
-		r.Delete("/disconnect", githubHandlers.DisconnectHandler)
+		// /connect and /callback use ?token= query param (browser redirects, no JWT header)
+		r.Get("/connect", githubHandlers.ConnectHandler)
+		r.Get("/callback", githubHandlers.CallbackHandler)
+
+		// JWT-protected endpoints
+		r.Group(func(r chi.Router) {
+			r.Use(JWTMiddleware)
+			r.Get("/status", githubHandlers.StatusHandler)
+			r.Get("/repos", githubHandlers.ReposHandler)
+			r.Delete("/disconnect", githubHandlers.DisconnectHandler)
+		})
 	})
 
 	r.Route("/audit", func(r chi.Router) {
